@@ -27,41 +27,18 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *************************************************************************/
-#include <ros/ros.h>
-#include <ros/forwards.h>
-#include <ros/single_subscriber_publisher.h>
-#include <sensor_msgs/Image.h>
-#include <image_transport/image_transport.h>
-#include <visualization_msgs/Marker.h>
-#include <opencv/cv.h>
-#include <opencv/highgui.h>
-#include <cv_bridge/cv_bridge.h>
+#include "nodelet.h"
 
-#include <src/TagDetector.h>
-#include <src/TagDetection.h>
-#include <src/TagFamily.h>
-
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-
-#include <visualization_msgs/MarkerArray.h>
-#include "yaml-cpp/yaml.h"
-#include <sstream>
-#include <fstream>
-
-#include <boost/unordered_set.hpp>
-#include <boost/unordered_map.hpp>
-#include <boost/make_shared.hpp>
-
-#include "apriltags.h"
-#include <apriltags/AprilTagDetections.h>
-
+#include <pluginlib/class_list_macros.h>
+PLUGINLIB_EXPORT_CLASS(apriltags_nodelet::AprilNodelet, nodelet::Nodelet)
 
 using namespace std;
 
+namespace apriltags_nodelet
+{
 // Functions
 
-double GetTagSize(int tag_id)
+double AprilNodelet::GetTagSize(int tag_id)
 {
     boost::unordered_map<size_t, double>::iterator tag_sizes_it =
         tag_sizes_.find(tag_id);
@@ -72,7 +49,7 @@ double GetTagSize(int tag_id)
     }
 }
 
-void GetMarkerTransformUsingOpenCV(const TagDetection& detection, Eigen::Matrix4d& transform, cv::Mat& rvec, cv::Mat& tvec)
+void AprilNodelet::GetMarkerTransformUsingOpenCV(const TagDetection& detection, Eigen::Matrix4d& transform, cv::Mat& rvec, cv::Mat& tvec)
 {
     // Check if fx,fy or cx,cy are not set
     if ((camera_info_.K[0] == 0.0) || (camera_info_.K[4] == 0.0) || (camera_info_.K[2] == 0.0) || (camera_info_.K[5] == 0.0))
@@ -135,10 +112,10 @@ void GetMarkerTransformUsingOpenCV(const TagDetection& detection, Eigen::Matrix4
 
 // Draw a line with an arrow head
 // This function's argument list is designed to match the cv::line() function
-void ArrowLine(cv::Mat& image,
+void AprilNodelet::ArrowLine(cv::Mat& image,
                const cv::Point& pt1, const cv::Point& pt2, const cv::Scalar& color,
-               const int thickness=1, const int line_type=8, const int shift=0,
-               const double tip_length=0.1)
+               const int thickness, const int line_type, const int shift,
+               const double tip_length)
 {
     // Normalize the size of the tip depending on the length of the arrow
     const double tip_size = norm(pt1-pt2)*tip_length;
@@ -154,7 +131,7 @@ void ArrowLine(cv::Mat& image,
 }
 
 // Draw the marker's axes with red/green/blue lines
-void DrawMarkerAxes(const cv::Matx33f& intrinsic_matrix, const cv::Vec4f& distortion_coeffs,
+void AprilNodelet::DrawMarkerAxes(const cv::Matx33f& intrinsic_matrix, const cv::Vec4f& distortion_coeffs,
                     const cv::Mat& rvec, const cv::Mat& tvec, const float length, const bool use_arrows,
                     cv::Mat& image)
 {
@@ -184,7 +161,7 @@ void DrawMarkerAxes(const cv::Matx33f& intrinsic_matrix, const cv::Vec4f& distor
 
 // Draw the outline of the square marker in a single color,
 // with a mark on the first corner
-void DrawMarkerOutline(const TagDetection& detection, const cv::Scalar outline_color, cv::Mat& image)
+void AprilNodelet::DrawMarkerOutline(const TagDetection& detection, const cv::Scalar outline_color, cv::Mat& image)
 {
     // Draw outline
     const int outline_thickness = 2;
@@ -203,7 +180,7 @@ void DrawMarkerOutline(const TagDetection& detection, const cv::Scalar outline_c
 
 // Draw the four edges of the marker in separate colors
 // to show the ordering of corner points
-void DrawMarkerEdges(const TagDetection& detection, cv::Mat& image)
+void AprilNodelet::DrawMarkerEdges(const TagDetection& detection, cv::Mat& image)
 {
     // Draw edges
     std::vector<cv::Scalar> colors;
@@ -222,7 +199,7 @@ void DrawMarkerEdges(const TagDetection& detection, cv::Mat& image)
 }
 
 // Draw the marker's ID number
-void DrawMarkerID(const TagDetection& detection, const cv::Scalar text_color, cv::Mat& image)
+void AprilNodelet::DrawMarkerID(const TagDetection& detection, const cv::Scalar text_color, cv::Mat& image)
 {
     cv::Point2f center(0,0);
     for(int i = 0; i < 4; i++)
@@ -239,14 +216,14 @@ void DrawMarkerID(const TagDetection& detection, const cv::Scalar text_color, cv
 }
 
 // Callback for camera info
-void InfoCallback(const sensor_msgs::CameraInfoConstPtr& camera_info)
+void AprilNodelet::InfoCallback(const sensor_msgs::CameraInfoConstPtr& camera_info)
 {
     camera_info_ = (*camera_info);
     has_camera_info_ = true;
 }
 
 // Callback for image data
-void ImageCallback(const sensor_msgs::ImageConstPtr& msg)
+void AprilNodelet::ImageCallback(const sensor_msgs::ImageConstPtr& msg)
 {
     if(!has_camera_info_){
         ROS_WARN("No Camera Info Received Yet");
@@ -324,7 +301,7 @@ void ImageCallback(const sensor_msgs::ImageConstPtr& msg)
         Eigen::Quaternion<double> q(R);
         
         double tag_size = GetTagSize(detections[i].id);
-        cout << tag_size << " " << detections[i].id << endl;
+        //cout << tag_size << " " << detections[i].id << endl;
         
         // Fill in MarkerArray msg
         visualization_msgs::Marker marker_transform;
@@ -430,71 +407,30 @@ void ImageCallback(const sensor_msgs::ImageConstPtr& msg)
     }
 }
 
-void ConnectCallback(const ros::SingleSubscriberPublisher& info)
+void AprilNodelet::GetParameterValues()
 {
-    // Check for subscribers.
-    uint32_t subscribers = marker_publisher_.getNumSubscribers()
-                           + apriltag_publisher_.getNumSubscribers();
-    ROS_DEBUG("Subscription detected! (%d subscribers)", subscribers);
 
-    if(subscribers && !running_)
-    {
-        ROS_DEBUG("New Subscribers, Connecting to Input Image Topic.");
-        ros::TransportHints ros_transport_hints(ros::TransportHints().tcpNoDelay());
-        image_transport::TransportHints image_transport_hint(image_transport::TransportHints(
-                                "raw", ros_transport_hints, (*node_),
-                                "image_transport"));
+    ros::NodeHandle &np = getPrivateNodeHandle();
 
-        image_subscriber = (*image_).subscribe(
-                DEFAULT_IMAGE_TOPIC, 1, &ImageCallback,
-                image_transport_hint);
-        info_subscriber = (*node_).subscribe(
-                DEFAULT_CAMERA_INFO_TOPIC, 10, &InfoCallback);
-        running_ = true;
-    }
-}
-
-void DisconnectHandler()
-{
-}
-
-void DisconnectCallback(const ros::SingleSubscriberPublisher& info)
-{
-    // Check for subscribers.
-    uint32_t subscribers = marker_publisher_.getNumSubscribers()
-                           + apriltag_publisher_.getNumSubscribers();
-    ROS_DEBUG("Unsubscription detected! (%d subscribers)", subscribers);
-    
-    if(!subscribers && running_)
-    {
-        ROS_DEBUG("No Subscribers, Disconnecting from Input Image Topic.");
-        image_subscriber.shutdown();
-        info_subscriber.shutdown();
-        running_ = false;
-    }
-}
-
-void GetParameterValues()
-{
     // Load node-wide configuration values.
-    node_->param("tag_family", tag_family_name_, DEFAULT_TAG_FAMILY);
-    node_->param("default_tag_size", default_tag_size_, DEFAULT_TAG_SIZE);
-    node_->param("display_type", display_type_, DEFAULT_DISPLAY_TYPE);
-    node_->param("marker_thickness", marker_thickness_, 0.01);
+    np.param("tag_family", tag_family_name_, DEFAULT_TAG_FAMILY);
+    np.param("default_tag_size", default_tag_size_, DEFAULT_TAG_SIZE);
+    np.param("display_type", display_type_, DEFAULT_DISPLAY_TYPE);
+    np.param("marker_thickness", marker_thickness_, 0.01);
 
-    node_->param("viewer", viewer_, false);
-    node_->param("publish_detections_image", publish_detections_image_, false);
-    node_->param("display_marker_overlay", display_marker_overlay_, true);
-    node_->param("display_marker_outline", display_marker_outline_, false);
-    node_->param("display_marker_id", display_marker_id_, false);
-    node_->param("display_marker_edges", display_marker_edges_, false);
-    node_->param("display_marker_axes", display_marker_axes_, false);
+    np.param("viewer", viewer_, false);
+    np.param("publish_detections_image", publish_detections_image_, false);
+    np.param("display_marker_overlay", display_marker_overlay_, true);
+    np.param("display_marker_outline", display_marker_outline_, false);
+    np.param("display_marker_id", display_marker_id_, false);
+    np.param("display_marker_edges", display_marker_edges_, false);
+    np.param("display_marker_axes", display_marker_axes_, false);
 
     ROS_INFO("Tag Family: %s", tag_family_name_.c_str());
 
     // Load tag specific configuration values.
     XmlRpc::XmlRpcValue tag_data;
-    node_->param("tag_data", tag_data, tag_data);
+    np.param("tag_data", tag_data, tag_data);
 
     // Iterate through each tag in the configuration.
     XmlRpc::XmlRpcValue::ValueStruct::iterator it;
@@ -513,60 +449,49 @@ void GetParameterValues()
     }
 }
 
-void SetupPublisher()
-{    
-    ros::SubscriberStatusCallback connect_callback = &ConnectCallback;
-    ros::SubscriberStatusCallback disconnect_callback = &DisconnectCallback;
-    
+void AprilNodelet::SetupPublisher()
+{
     // Publisher
-    marker_publisher_ = node_->advertise<visualization_msgs::MarkerArray>(
-            DEFAULT_MARKER_TOPIC, 1, connect_callback,
-            disconnect_callback);
-    apriltag_publisher_ = node_->advertise<apriltags::AprilTagDetections>(
-            DEFAULT_DETECTIONS_TOPIC, 1, connect_callback, disconnect_callback);
+    marker_publisher_ = node_.advertise<visualization_msgs::MarkerArray>(DEFAULT_MARKER_TOPIC, 1);
+    apriltag_publisher_ = node_.advertise<apriltags::AprilTagDetections>(DEFAULT_DETECTIONS_TOPIC, 1);
 
     if(publish_detections_image_)
     {
-        image_publisher_ = (*image_).advertise(DEFAULT_DETECTIONS_IMAGE_TOPIC, 1);
+        image_publisher_ = node_.advertise<sensor_msgs::Image>(DEFAULT_DETECTIONS_IMAGE_TOPIC, 1);
     }
 }
 
-void InitializeTags()
+void AprilNodelet::InitializeTags()
 {
     tag_params.newQuadAlgorithm = 1;
     family_ = new TagFamily(tag_family_name_);
     detector_ = new TagDetector(*family_, tag_params);
 }
 
-void InitializeROSNode(int argc, char **argv)
-{
-    ros::init(argc, argv, "apriltags");
-    node_ =  boost::make_shared<ros::NodeHandle>("~");
-    image_ = boost::make_shared<image_transport::ImageTransport>(*node_);
-}
+void AprilNodelet::onInit(){
 
-int main(int argc, char **argv)
-{
-    InitializeROSNode(argc,argv);
+    node_ =  getNodeHandle();
+
     GetParameterValues();
     SetupPublisher();
     InitializeTags();
 
-    if(viewer_){
+    /*if(viewer_){
         cvNamedWindow("AprilTags");
         cvStartWindowThread();
-    }
+    }*/
 
     ROS_INFO("AprilTags node started.");
-    running_ = false;
+    running_ = true;
     has_camera_info_ = false;
-    ros::spin();
-    ROS_INFO("AprilTags node stopped.");
 
-    //Destroying Stuff
-    cvDestroyWindow("AprilTags");
-    delete detector_;
-    delete family_;
-
-    return EXIT_SUCCESS;
+    image_subscriber = node_.subscribe(DEFAULT_IMAGE_TOPIC, 1, &AprilNodelet::ImageCallback, this);
+    info_subscriber = node_.subscribe(DEFAULT_CAMERA_INFO_TOPIC, 10, &AprilNodelet::InfoCallback, this);
 }
+
+AprilNodelet::~AprilNodelet()
+{
+    delete detector_;
+    delete family_; // oh noes
+}
+} // namespace

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(apriltags)
+project(apriltags_nodelet)
 
 # Set up the ROS Catkin package settings.
 find_package(catkin REQUIRED COMPONENTS
@@ -11,7 +11,9 @@ find_package(catkin REQUIRED COMPONENTS
   cmake_modules
   message_generation
   geometry_msgs
+  nodelet
 )
+
 find_package(OpenCV REQUIRED)
 find_package(Eigen REQUIRED)
 
@@ -31,7 +33,6 @@ generate_messages(DEPENDENCIES
 
 # Set up the ROS Catkin package settings
 catkin_package(
-  INCLUDE_DIRS include
   CATKIN_DEPENDS cv_bridge
                  std_msgs
                  sensor_msgs
@@ -46,7 +47,8 @@ add_definitions(-frounding-math)
 # Download the external Swatbotics repository.
 include(ExternalProject)
 ExternalProject_Add(apriltags_swatbotics_EXTERNAL
-    GIT_REPOSITORY https://github.com/personalrobotics/apriltags-cpp.git
+   # GIT_REPOSITORY https://github.com/personalrobotics/apriltags-cpp.git
+    URL /home/ubuntu/apriltags-cpp/
     INSTALL_COMMAND ""
     BUILD_COMMAND "make" # I don't know why this works...
     CMAKE_ARGS -DCMAKE_CXX_FLAGS=-frounding-math -DBUILD_SHARED_LIBS:BOOL=ON
@@ -72,26 +74,36 @@ set_property(TARGET apriltags_swatbotics
 add_dependencies(apriltags_swatbotics apriltags_swatbotics_EXTERNAL)
 
 include_directories(
-    include/
+    ${OpenCV_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${Eigen_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
     ${Yaml_INCLUDE_DIRS}
     ${apriltags_swatbotics_INCLUDE_DIRS}
 )
 
-add_executable(apriltags src/apriltags.cpp)
-target_link_libraries(apriltags ${catkin_LIBRARIES})
-target_link_libraries(apriltags ${Eigen_LIBRARIES})
-target_link_libraries(apriltags ${OpenCV_LIBRARIES})
-target_link_libraries(apriltags ${Yaml_LIBRARIES})
-target_link_libraries(apriltags apriltags_swatbotics)
-add_dependencies(apriltags ${PROJECT_NAME}_gencpp)
+add_library(apriltags_nodelet    src/nodelets/nodelet.cpp )
+target_link_libraries(apriltags_nodelet ${catkin_LIBRARIES})
+target_link_libraries(apriltags_nodelet ${Eigen_LIBRARIES})
+target_link_libraries(apriltags_nodelet ${OpenCV_LIBRARIES})
+target_link_libraries(apriltags_nodelet ${Yaml_LIBRARIES})
+target_link_libraries(apriltags_nodelet apriltags_swatbotics)
+add_dependencies(apriltags_nodelet ${PROJECT_NAME}_gencpp)
 
-install(TARGETS apriltags
+
+add_executable(apriltags_exe src/main.cpp)
+target_link_libraries(apriltags_exe ${catkin_LIBRARIES})
+target_link_libraries(apriltags_exe ${Eigen_LIBRARIES})
+target_link_libraries(apriltags_exe ${OpenCV_LIBRARIES})
+target_link_libraries(apriltags_exe ${Yaml_LIBRARIES})
+target_link_libraries(apriltags_exe apriltags_swatbotics)
+add_dependencies(apriltags_exe apriltags_nodelet_gencpp)
+
+
+install(TARGETS apriltags_exe
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} 
 )
 
 install(FILES ${apriltags_swatbotics_LIBRARIES}
   DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
+

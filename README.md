@@ -1,22 +1,13 @@
-apriltags
-=========
+#Apriltags nodelet
 
-ROS wrapper for the Swatbotics C++ port of the AprilTag visual
-fiducial detector.  
-The Swatbotics port uses OpenCV and CGAL for improved performance.  
-http://github.com/swatbotics/apriltags-cpp
-
-The AprilTag system was originally developed by the April laboratory at the University of Michigan.
-http://april.eecs.umich.edu/wiki/index.php/AprilTags  
-E. Olson, *"AprilTag: A robust and flexible visual fiducial system"*, IEEE International Conference on Robotics and Automation (ICRA), 2011.
-
+A port of the apriltags node to a nodelet container. Also pulls OpenCV install from cv_bridge to avoid compile problems on Jetson TK1
 
 **Installation**
 
 Install dependencies:  
 > $ sudo aptitude install libcgal-dev
 
-Clone this repo into your catkin workspace and build.
+Clone this repo into your catkin workspace and build. Note that this library conflicts with the apriltags node, so delete it first then clone this repo.
 
 
 **Print some AprilTags**
@@ -33,25 +24,30 @@ There are *.tgz files for each family, including a *.ps file with one tag per pa
 
 **Configuration**
 
-Edit the launch file `apriltags.launch`
+Use the same nodelet manager as your camera.
 
-Set the default tag file parameter  
-> param name="~default_tag_size" value="0.046"  
+```
+<node pkg="nodelet" type="nodelet" name="image_proc" args="load apriltags_nodelet/AprilNodelet camera_nodelet_manager">
+    <param name="default_tag_size" value="0.15" />
 
-to be the width of the black square of the tags you printed out e.g. 46mm
+    <param name="viewer" value="false" />
+    <param name="publish_detections_image" value="false" />
 
-If your webcam does not publish images to the default topic name, you may need to edit these 2 parameters:  
-> remap from="~image" to="/camera/rgb/image_rect"  
-> remap from="~camera_info" to="/camera/rgb/camera_info"  
+    <param name="display_type" value="CUBE" />
+    <param name="marker_thickness" value="0.02" />
 
-For the Kinect2, they should be set too:  
-> remap from="~image" to="/kinect2/hd/image_color_rect"  
-> remap from="~camera_info" to="/kinect2/hd/camera_info"  
+    <rosparam param="tag_data">
+      "1":
+        size: 0.150
+      "2":
+        size: 0.100
+      "3":
+        size: 0.100
+    </rosparam>
 
-**Usage**
-
-> $ roslaunch apriltags apriltags.launch  
-
-To check if the node can detect your printed tag:  
-> $ rostopic echo /apriltags/detections  
-
+    <remap from="image" to="/camera/color/image_raw"/>
+    <remap from="camera_info" to="/camera/color/camera_info"/>
+    <remap from="marker_array" to="/apriltags/marker_array"/>
+    <remap from="detections" to="/apriltags/detections"/>
+</node>
+``` 
