@@ -2,7 +2,9 @@
 
 A port of the apriltags node to a nodelet container. Also pulls OpenCV install from cv_bridge to avoid compile problems on Jetson TK1
 
-**Installation**
+the original node: https://github.com/personalrobotics/apriltags
+
+##Installation
 
 Install dependencies:  
 > $ sudo aptitude install libcgal-dev
@@ -10,7 +12,7 @@ Install dependencies:
 Clone this repo into your catkin workspace and build. Note that this library conflicts with the apriltags node, so delete it first then clone this repo.
 
 
-**Print some AprilTags**
+##Print some AprilTags
 
 Images of the default tag family can be found in `tags/36h11.ps`
 
@@ -22,7 +24,7 @@ Alternatively you can download images of the tags from here:
 https://april.eecs.umich.edu/wiki/index.php/AprilTags  
 There are *.tgz files for each family, including a *.ps file with one tag per page.
 
-**Configuration**
+##Configuration
 
 Use the same nodelet manager as your camera.
 
